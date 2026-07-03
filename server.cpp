@@ -4,6 +4,7 @@
 #include <cstring>
 
 #ifndef _WIN32
+    // LINUX / RAILWAY KÜTÜPHANELERİ
     #include <sys/socket.h>
     #include <netinet/in.h>
     #include <arpa/inet.h>
@@ -16,12 +17,12 @@
     void Sleep(unsigned long ms) { usleep(ms * 1000); }
     int GetLastNetworkError() { return 0; } 
 #else
+    // WINDOWS KÜTÜPHANELERİ
     #include <winsock2.h>
     #pragma comment(lib, "ws2_32.lib")
     int GetLastNetworkError() { return WSAGetLastError(); }
 #endif
 
-// 🎯 CAN DEĞİŞKENLİ YENİ SENSOR YAPISI
 struct PlayerNetworkData {
     int id;
     float posX, posY, posZ;
@@ -35,6 +36,7 @@ std::map<int, PlayerNetworkData> playerPositions;
 int nextPlayerId = 1;
 
 int main() {
+    // Railway'in içeride atayabileceği PORT çevre değişkenini kontrol et
     int port = 1234; 
     if (const char* env_p = std::getenv("PORT")) {
         port = std::stoi(env_p);

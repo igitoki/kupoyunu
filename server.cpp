@@ -3,6 +3,7 @@
 #include <map>
 #include <cstring>
 
+// 🎯 İşletim sistemine göre ağ kütüphaneleri ve fonksiyon tanımları
 #ifndef _WIN32
     // LINUX / RAILWAY KÜTÜPHANELERİ
     #include <sys/socket.h>
@@ -10,12 +11,13 @@
     #include <arpa/inet.h>
     #include <unistd.h>
     #include <fcntl.h>
+    #include <cerrno>
     #define SOCKET int
     #define INVALID_SOCKET -1
     #define SOCKET_ERROR -1
     #define closesocket(s) close(s)
     void Sleep(unsigned long ms) { usleep(ms * 1000); }
-    int GetLastNetworkError() { return 0; } 
+    int GetLastNetworkError() { return errno; } 
 #else
     // WINDOWS KÜTÜPHANELERİ
     #include <winsock2.h>
@@ -23,12 +25,14 @@
     int GetLastNetworkError() { return WSAGetLastError(); }
 #endif
 
+// 🎯 Genişletilmiş Ağ Paketi Yapısı
 struct PlayerNetworkData {
     int id;
     float posX, posY, posZ;
     bool isShooting;
     float targetX, targetY, targetZ;
     int health; 
+    char chatMsg[64]; 
 };
 
 std::map<SOCKET, int> clientMap;
@@ -36,7 +40,6 @@ std::map<int, PlayerNetworkData> playerPositions;
 int nextPlayerId = 1;
 
 int main() {
-    // Railway'in içeride atayabileceği PORT çevre değişkenini kontrol et
     int port = 1234; 
     if (const char* env_p = std::getenv("PORT")) {
         port = std::stoi(env_p);
@@ -74,7 +77,7 @@ int main() {
     }
 
     listen(serverSocket, 32);
-    std::cout << "Sunucu aktif. Dinlenen Port: " << port << std::endl;
+    std::cout << "Sunucu sorunsuzca aktif edildi. Dinlenen Port: " << port << std::endl;
 
     std::vector<SOCKET> clients;
 
@@ -98,6 +101,7 @@ int main() {
             int assignedId = nextPlayerId++;
             clientMap[newClient] = assignedId;
             send(newClient, (char*)&assignedId, sizeof(int), 0);
+            std::cout << "Oyuncu baglandi. ID: " << assignedId << std::endl;
         }
 
         for (auto it = clients.begin(); it != clients.end();) {
@@ -114,20 +118,23 @@ int main() {
                 }
                 it++;
             } 
+            // 🎯 Hataya sebep olan temizlenmiş kopma kontrolü bloğu
             else if (bytesReceived == 0 || (bytesReceived == SOCKET_ERROR && 
 #ifndef _WIN32
-                errno != EAGAIN && errno != EWOULDBLOCK
+                GetLastNetworkError() != EAGAIN && GetLastNetworkError() != EWOULDBLOCK
 #else
                 GetLastNetworkError() != WSAEWOULDBLOCK
 #endif
             )) {
                 int disconnectedId = clientMap[client];
+                std::cout << "Oyuncu koptu: ID " << disconnectedId << std::endl;
+
                 playerPositions.erase(disconnectedId);
                 clientMap.erase(client);
                 closesocket(client);
                 it = clients.erase(it);
 
-                PlayerNetworkData disconnectPacket = { disconnectedId, 0, -999.0f, 0, false, 0, 0, 0, 0 };
+                PlayerNetworkData disconnectPacket = { disconnectedId, 0, -999.0f, 0, false, 0, 0, 0, 0, "" };
                 for (SOCKET otherClient : clients) {
                     send(otherClient, (char*)&disconnectPacket, sizeof(PlayerNetworkData), 0);
                 }

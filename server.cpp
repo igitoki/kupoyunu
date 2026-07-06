@@ -3,9 +3,7 @@
 #include <map>
 #include <cstring>
 
-// 🎯 İşletim sistemine göre ağ kütüphaneleri ve fonksiyon tanımları
 #ifndef _WIN32
-    // LINUX / RAILWAY KÜTÜPHANELERİ
     #include <sys/socket.h>
     #include <netinet/in.h>
     #include <arpa/inet.h>
@@ -19,13 +17,16 @@
     void Sleep(unsigned long ms) { usleep(ms * 1000); }
     int GetLastNetworkError() { return errno; } 
 #else
-    // WINDOWS KÜTÜPHANELERİ
     #include <winsock2.h>
     #pragma comment(lib, "ws2_32.lib")
     int GetLastNetworkError() { return WSAGetLastError(); }
 #endif
 
-// 🎯 Genişletilmiş Ağ Paketi Yapısı (Boyutlar main.cpp ile birebir aynı)
+enum PacketType {
+    PACKET_PLAYER_DATA = 1,
+    PACKET_BLOCK_ACTION = 2
+};
+
 struct PlayerNetworkData {
     int id;
     float posX, posY, posZ;
@@ -35,12 +36,23 @@ struct PlayerNetworkData {
     char chatMsg[64]; 
 };
 
+struct BlockActionPacket {
+    int x, y, z;
+    int blockType; 
+};
+
+struct NetworkPacket {
+    int type;
+    union {
+        PlayerNetworkData playerData;
+        BlockActionPacket blockData;
+    } data;
+};
+
 std::map<SOCKET, int> clientMap;
-std::map<int, PlayerNetworkData> playerPositions;
 int nextPlayerId = 1;
 
 int main() {
-    // 🎯 Railway TCP Proxy iç portu (:1234) ile eşitlemek için port sabitlendi
     int port = 1234; 
 
 #ifdef _WIN32
@@ -75,7 +87,7 @@ int main() {
     }
 
     listen(serverSocket, 32);
-    std::cout << "Sunucu sabit 1234 portunda aktif. Proxy baglantisi bekleniyor..." << std::endl;
+    std::cout << "Fortnite BR Sunucusu 1234 Portunda Aktif!" << std::endl;
 
     std::vector<SOCKET> clients;
 
@@ -99,19 +111,18 @@ int main() {
             int assignedId = nextPlayerId++;
             clientMap[newClient] = assignedId;
             send(newClient, (char*)&assignedId, sizeof(int), 0);
-            std::cout << "Oyuncu proxy uzerinden baglandi. ID: " << assignedId << std::endl;
+            std::cout << "Oyuncu Baglandi. ID: " << assignedId << std::endl;
         }
 
         for (auto it = clients.begin(); it != clients.end();) {
             SOCKET client = *it;
-            PlayerNetworkData incomingData;
-            int bytesReceived = recv(client, (char*)&incomingData, sizeof(PlayerNetworkData), 0);
+            NetworkPacket packet;
+            int bytesReceived = recv(client, (char*)&packet, sizeof(NetworkPacket), 0);
 
-            if (bytesReceived == sizeof(PlayerNetworkData)) {
-                playerPositions[incomingData.id] = incomingData;
+            if (bytesReceived == sizeof(NetworkPacket)) {
                 for (SOCKET otherClient : clients) {
                     if (otherClient != client) {
-                        send(otherClient, (char*)&incomingData, sizeof(PlayerNetworkData), 0);
+                        send(otherClient, (char*)&packet, sizeof(NetworkPacket), 0);
                     }
                 }
                 it++;
@@ -124,16 +135,18 @@ int main() {
 #endif
             )) {
                 int disconnectedId = clientMap[client];
-                std::cout << "Oyuncu ayrildi: ID " << disconnectedId << std::endl;
+                std::cout << "Oyuncu Ayrildi: ID " << disconnectedId << std::endl;
 
-                playerPositions.erase(disconnectedId);
                 clientMap.erase(client);
                 closesocket(client);
                 it = clients.erase(it);
 
-                PlayerNetworkData disconnectPacket = { disconnectedId, 0, -999.0f, 0, false, 0, 0, 0, 0, "" };
+                NetworkPacket dcPacket;
+                dcPacket.type = PACKET_PLAYER_DATA;
+                dcPacket.data.playerData = { disconnectedId, 0, -999.0f, 0, false, 0, 0, 0, 0, "" };
+                
                 for (SOCKET otherClient : clients) {
-                    send(otherClient, (char*)&disconnectPacket, sizeof(PlayerNetworkData), 0);
+                    send(otherClient, (char*)&dcPacket, sizeof(NetworkPacket), 0);
                 }
             } else {
                 it++;

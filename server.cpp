@@ -25,7 +25,7 @@
     int GetLastNetworkError() { return WSAGetLastError(); }
 #endif
 
-// 🎯 Genişletilmiş Ağ Paketi Yapısı
+// 🎯 Genişletilmiş Ağ Paketi Yapısı (Boyutlar main.cpp ile birebir aynı)
 struct PlayerNetworkData {
     int id;
     float posX, posY, posZ;
@@ -40,10 +40,8 @@ std::map<int, PlayerNetworkData> playerPositions;
 int nextPlayerId = 1;
 
 int main() {
+    // 🎯 Railway TCP Proxy iç portu (:1234) ile eşitlemek için port sabitlendi
     int port = 1234; 
-    if (const char* env_p = std::getenv("PORT")) {
-        port = std::stoi(env_p);
-    }
 
 #ifdef _WIN32
     WSADATA wsaData;
@@ -77,7 +75,7 @@ int main() {
     }
 
     listen(serverSocket, 32);
-    std::cout << "Sunucu sorunsuzca aktif edildi. Dinlenen Port: " << port << std::endl;
+    std::cout << "Sunucu sabit 1234 portunda aktif. Proxy baglantisi bekleniyor..." << std::endl;
 
     std::vector<SOCKET> clients;
 
@@ -101,7 +99,7 @@ int main() {
             int assignedId = nextPlayerId++;
             clientMap[newClient] = assignedId;
             send(newClient, (char*)&assignedId, sizeof(int), 0);
-            std::cout << "Oyuncu baglandi. ID: " << assignedId << std::endl;
+            std::cout << "Oyuncu proxy uzerinden baglandi. ID: " << assignedId << std::endl;
         }
 
         for (auto it = clients.begin(); it != clients.end();) {
@@ -118,7 +116,6 @@ int main() {
                 }
                 it++;
             } 
-            // 🎯 Hataya sebep olan temizlenmiş kopma kontrolü bloğu
             else if (bytesReceived == 0 || (bytesReceived == SOCKET_ERROR && 
 #ifndef _WIN32
                 GetLastNetworkError() != EAGAIN && GetLastNetworkError() != EWOULDBLOCK
@@ -127,7 +124,7 @@ int main() {
 #endif
             )) {
                 int disconnectedId = clientMap[client];
-                std::cout << "Oyuncu koptu: ID " << disconnectedId << std::endl;
+                std::cout << "Oyuncu ayrildi: ID " << disconnectedId << std::endl;
 
                 playerPositions.erase(disconnectedId);
                 clientMap.erase(client);
